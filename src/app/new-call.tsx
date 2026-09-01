@@ -1,5 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
+import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import React, { useState } from 'react';
 import {
   Alert,
@@ -12,6 +13,8 @@ import {
   View,
 } from 'react-native';
 
+import { ALUNO_ID, db } from '../firebase/config';
+
 export default function NewCallScreen() {
   // Estados: "caixinhas" que guardam o que o usuário digita ou a foto que escolhe
   const [description, setDescription] = useState('');
@@ -20,6 +23,8 @@ export default function NewCallScreen() {
   const [address, setAddress] = useState<string | null>(null);
   // Controla o texto &quot;Buscando localização...&quot; enquanto aguardamos o GPS
   const [loadingLocation, setLoadingLocation] = useState(false);
+
+  const [saving, setSaving] = useState(false);
 
   // Função para tirar foto com a câmera
   async function handleTakePhoto() {
@@ -99,6 +104,30 @@ export default function NewCallScreen() {
     }
   }
 
+  async function handleCreateCall() {
+    setSaving(true);
+
+    try {
+      await addDoc(collection(db, 'alunos', ALUNO_ID, 'chamados'), {
+        description,
+        photoUri,
+        address,
+        status: 'aberto',
+        criadoEm: serverTimestamp(),
+      });
+
+      Alert.alert('Sucesso', 'Chamado registrado!');
+      setDescription('');
+      setPhotoUri(null);
+      setAddress(null);
+      navigation.navigate('CallList');
+    } catch (error) {
+      Alert.alert('Erro', 'Não foi possível salvar o chamado. Tente novamente.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Novo Chamado</Text>
@@ -159,11 +188,15 @@ export default function NewCallScreen() {
       </View>
 
       <TouchableOpacity
-        style={[styles.button, styles.confirmButton, !description && styles.disabledButton]}
-        disabled={!description}
-        onPress={() => Alert.alert('Sucesso', 'Chamado registrado localmente!')}
+        style={[
+          styles.button,
+          styles.confirmButton,
+          (!description || saving) && styles.disabledButton,
+        ]}
+        disabled={!description || saving}
+        onPress={handleCreateCall}
       >
-        <Text style={styles.buttonText}>Criar Chamado</Text>
+        <Text style={styles.buttonText}>{saving ? 'Salvando...' : 'Criar Chamado'}</Text>
       </TouchableOpacity>
     </ScrollView>
   );
