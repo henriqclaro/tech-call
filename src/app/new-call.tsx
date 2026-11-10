@@ -1,6 +1,7 @@
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import * as Notifications from 'expo-notifications';
+import { addDoc, collection, serverTimestamp, updateDoc } from 'firebase/firestore';
 import React, { useState } from 'react';
 import {
   Alert,
@@ -15,7 +16,9 @@ import {
 
 import { ALUNO_ID, db } from '../firebase/config';
 
-export default function NewCallScreen() {
+const SLA_SECONDS = 10;
+
+export default function NewCallScreen({ navigation }: any) {
   // Estados: "caixinhas" que guardam o que o usuário digita ou a foto que escolhe
   const [description, setDescription] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
@@ -108,13 +111,39 @@ export default function NewCallScreen() {
     setSaving(true);
 
     try {
-      await addDoc(collection(db, 'alunos', ALUNO_ID, 'chamados'), {
+      const docRef = await addDoc(collection(db, 'alunos', ALUNO_ID, 'chamados'), {
         description,
         photoUri,
         address,
         status: 'aberto',
         criadoEm: serverTimestamp(),
       });
+
+      // Pede permissão para enviar notificações
+      const permission = await Notifications.requestPermissionsAsync();
+      if (permission.granted) {
+        // Agenda a notificação de alerta do SLA
+        const notificationId = await Notifications.scheduleNotificationAsync({
+          content: {
+            title: 'TechCall - Alerta de SLA',
+            body: 'O prazo de atendimento de um chamado expirou!',
+            data: { chamadoId: docRef.id },
+          },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+            seconds: SLA_SECONDS,
+          },
+        });
+
+        // Salva o id da notificação no Firestore para poder cancelá-la se atendido
+        await updateDoc(docRef, { slaNotificationId: notificationId });
+      } else {
+        // Orienta o usuário caso a permissão tenha sido negada
+        Alert.alert(
+          'Permissão de Notificação Negada',
+          'Você não receberá alertas de SLA. Para ativar, habilite as notificações nas configurações do seu celular.',
+        );
+      }
 
       Alert.alert('Sucesso', 'Chamado registrado!');
       setDescription('');

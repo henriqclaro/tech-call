@@ -1,3 +1,4 @@
+import * as Notifications from 'expo-notifications';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import {
@@ -18,6 +19,7 @@ type Chamado = {
   photoUri?: string | null;
   address?: string | null;
   status: string;
+  slaNotificationId?: string;
 };
 
 export default function CallDetailScreen({ route }: any) {
@@ -54,6 +56,15 @@ export default function CallDetailScreen({ route }: any) {
     try {
       const docRef = doc(db, 'alunos', ALUNO_ID, 'chamados', chamadoId);
       await updateDoc(docRef, { status: novoStatus });
+
+      // Se o chamado foi atendido a tempo,
+      // cancela o alerta de SLA que ainda não disparou
+      if (
+        (novoStatus === 'atendendo' || novoStatus === 'cancelado') &&
+        chamado?.slaNotificationId
+      ) {
+        await Notifications.cancelScheduledNotificationAsync(chamado.slaNotificationId);
+      }
 
       setChamado((prev) => (prev ? { ...prev, status: novoStatus } : null));
       Alert.alert('Sucesso', 'Status atualizado com sucesso!');
